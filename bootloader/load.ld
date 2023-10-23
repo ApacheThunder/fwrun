@@ -4,7 +4,9 @@ ENTRY(_start)
 
 MEMORY {
 
-	vram	: ORIGIN = 0x06000000, LENGTH = 128K
+	vram	: ORIGIN = 0x06020000, LENGTH = 128K
+	/* arm9ram	: ORIGIN = 0x027FD800, LENGTH = 4K		Used for the ARM9's functions */
+	arm9ram	: ORIGIN = 0x02FFC800, LENGTH = 4K		/* Used for the ARM9's functions */
 }
 
 __vram_start	=	ORIGIN(vram);
@@ -14,7 +16,18 @@ __sp_svc	=	__sp_irq - 0x100;
 __sp_usr	=	__sp_svc - 0x100;
 
 __irq_flags	=	__vram_top - 8;
+__irq_flagsaux	=	__vram_top - 0x40;
 __irq_vector	=	__vram_top - 4;
+
+
+__arm9ram_start	=	ORIGIN(arm9ram);
+__arm9ram_top	=	ORIGIN(arm9ram)+ LENGTH(arm9ram);
+
+/* No IRQs or SVC calls in ARM9 boot code so give them minimal stacks */
+__arm9_sp_irq	=	__arm9ram_top;
+__arm9_sp_svc	=	__arm9_sp_irq - 0x10;
+__arm9_sp_usr	=	__arm9_sp_svc - 0x10;
+
 
 SECTIONS
 {
@@ -30,11 +43,27 @@ SECTIONS
 		*(.plt) 
 	} >vram = 0xff
 
-	.text :   /* ALIGN (4): */
+	__arm9_source_start = . ;
+	.arm9 :
 	{
+		__arm9_start = . ;
+		*.arm9.*(.text*)
+		*.arm9.*(.data*)
+		__arm9_bss_start = ABSOLUTE(.);
+		*.arm9.*(.bss*)
+		__arm9_bss_end = ABSOLUTE(.);
+		__arm9_end = . ;
+	} >arm9ram AT>vram =0xff
+	__arm9_source_end = __arm9_source_start + SIZEOF(.arm9);
 
-		*(.text*)
+	. = __arm9_source_end;
+	. = ALIGN(4);
+
+	.text ALIGN(4) :  /* ALIGN (4): */
+	{
+		*(.text)
 		*(.stub)
+		*(.text.*)
 		/* .gnu.warning sections are handled specially by elf32.em.  */
 		*(.gnu.warning)
 		*(.gnu.linkonce.t*)
@@ -49,6 +78,7 @@ SECTIONS
 	} >vram =0xff
 
 	__text_end = . ;
+
 
 	.rodata :
 	{
@@ -196,3 +226,4 @@ SECTIONS
 	.stack 0x80000 : { _stack = .; *(.stack) }
 	/* These must appear regardless of  .  */
 }
+

@@ -1,15 +1,19 @@
 /*
 	Copyright 2006 - 2015 Dave Murphy (WinterMute)
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
 	the Free Software Foundation, either version 2 of the License, or
 	(at your option) any later version.
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU General Public License for more details.
+
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 
 #include <nds/arm9/cache_asm.h>
@@ -23,13 +27,15 @@
 	.cpu	arm946e-s
 
 @---------------------------------------------------------------------------------
-	.global _start
-	.type	_start STT_FUNC
-	.global	mpu_reset
-	.global mpu_reset_end
+	.global arm9_reset
+	.type	arm9_reset STT_FUNC
 @---------------------------------------------------------------------------------
-mpu_reset:
+arm9_reset:
 @---------------------------------------------------------------------------------
+	mrs	r0, cpsr			@ cpu interrupt disable
+	orr	r0, r0, #0x80			@ (set i flag)
+	msr	cpsr, r0
+
 	@ Switch off MPU
 	mrc	p15, 0, r0, c1, c0, 0
 	bic	r0, r0, #PROTECT_ENABLE
@@ -67,32 +73,56 @@ mpu_reset:
 	sub	r0, r0, #4              @ IRQ1 Check Bits
 	str 	r1, [r0]
 
-	sub	r0, r0, #128
-	bic	r0, r0, #7
+	bic	r0, r0, #0x7f
 
 	msr	cpsr_c, #0xd3      @ svc mode
 	mov	sp, r0
-	sub	r0, r0, #128
+	sub	r0, r0, #64
 	msr	cpsr_c, #0xd2      @ irq mode
 	mov	sp, r0
-	sub	r0, r0, #128
+	sub	r0, r0, #4096
 	msr	cpsr_c, #0xdf      @ system mode
 	mov	sp, r0
 
-	@ enable cache & tcm
-	mrc	p15, 0, r0, c1, c0, 0
-	ldr	r1,= ITCM_ENABLE | DTCM_ENABLE | ICACHE_ENABLE | DCACHE_ENABLE
-	orr	r0,r0,r1
+	mov	r12, #0x04000000
+	add	r12, r12, #0x180
+
+	@ ipcSendState(ARM9_RESET)
+	mov	r0, #0x200
+	strh	r0, [r12]
+	@ while (ipcRecvState() != ARM7_RESET);
+	mov	r0, #2
+	bl	waitsync
+
+	@ ipcSendState(ARM9_BOOT)
+	mov	r0, #0
+	strh	r0, [r12]
+	@ while (ipcRecvState() != ARM7_BOOT);
+	bl	waitsync
+
+	ldr	r10, =0x2FFFE24
+	ldr	r2, [r10]
+	
+	@ Switch MPU to startup default
+	ldr	r0, =0x00012078
 	mcr	p15, 0, r0, c1, c0, 0
 
-	ldr	r10, =0x2FFFE04
-	ldr	r0, =0xE59FF018
-	str	r0, [r10]
-	add	r1, r10, #0x20
-	str	r10, [r1]
-	mov r15, r10
+	@ enable cache & tcm
+	ldr	r1,= ITCM_ENABLE | DTCM_ENABLE | ICACHE_ENABLE | DCACHE_ENABLE
+	orr	r0,r0,r1
+	
+	bx	r2
 
 	.pool
+
+@---------------------------------------------------------------------------------
+waitsync:
+@---------------------------------------------------------------------------------
+	ldrh	r1, [r12]
+	and	r1, r1, #0x000f
+	cmp	r0, r1
+	bne	waitsync
+	bx	lr
 
 mpu_initial_data:
 	.word 0x00000042  @ p15,0,c2,c0,0..1,r0 ;PU Cachability Bits for Data/Unified+Instruction Protection Region
@@ -106,5 +136,4 @@ mpu_initial_data:
 	.word 0xffff001d  @ p15,0,c6,c6,0,r8    ;PU Protection Unit Data/Unified Region 6
 	.word 0x02fff017  @ p15,0,c6,c7,0,r9    ;PU Protection Unit Data/Unified Region 7 4KB
 	.word 0x0300000a  @ p15,0,c9,c1,0,r10   ;TCM Data TCM Base and Virtual Size
-
-mpu_reset_end:
+itcm_reset_code_end:

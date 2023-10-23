@@ -71,10 +71,9 @@ int main() {
 	irqEnable(IRQ_VBLANK | IRQ_VCOUNT | IRQ_NETWORK);
 
 	setPowerButtonCB(powerButtonCB);
-
+		
 	// Keep the ARM7 mostly idle
-	while (!exitflag) {
-		swiWaitForVBlank();
-	}
+	while (!exitflag) { swiWaitForVBlank();	}
 	return 0;
 }
+

@@ -1,27 +1,3 @@
-/*-----------------------------------------------------------------
-
- Copyright (C) 2005  Michael "Chishm" Chisholm
-
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
- If you use this code, please give due credit and email me about your
- project at chishm@hotmail.com
-------------------------------------------------------------------*/
-
-@ nds and dldi-specific stuff removed by nocebo
-
 @---------------------------------------------------------------------------------
 	.section ".init"
 	.global _start
@@ -38,11 +14,9 @@ params:
 	.word	0xFFFFFFFF
 
 startUp:
-	mov	r0, #0x04000000
-	mov	r1, #0
-	str	r1, [r0,#0x208]		@ REG_IME
-	str	r1, [r0,#0x210]		@ REG_IE
-	str	r1, [r0,#0x218]		@ REG_AUXIE
+	mov	r0, #0x04000000		@ IME = 0;
+	add	r0, r0, #0x208
+	strh	r0, [r0]
 
 	mov	r0, #0x12		@ Switch to IRQ Mode
 	msr	cpsr, r0
@@ -60,12 +34,24 @@ startUp:
 	ldr	r1, =__bss_end
 	sub	r1, r1, r0
 	bl	ClearMem
+	
+@ Load ARM9 region into main RAM
+	ldr	r1, =__arm9_source_start
+	ldr	r2, =__arm9_start	
+	ldr	r3, =__arm9_source_end
+	sub	r3, r3, r1
+	bl	CopyMem
+
+@ Start ARM9 binary
+	ldr	r0, =0x02FFFE24	
+	ldr	r1, =_arm9_start
+	str	r1, [r0]
 
 	mov	r0, #0			@ int argc
 	mov	r1, #0			@ char *argv[]
-	ldr	r3, =main
+	ldr	r3, =arm7_main
 	bl	_blx_r3_stub		@ jump to user code
-
+		
 	@ If the user ever returns, restart
 	b	_start
 
@@ -73,6 +59,7 @@ startUp:
 _blx_r3_stub:
 @---------------------------------------------------------------------------------
 	bx	r3
+
 
 @---------------------------------------------------------------------------------
 @ Clear memory to 0x00 if length != 0
@@ -84,14 +71,14 @@ ClearMem:
 	mov	r2, #3			@ Round down to nearest word boundary
 	add	r1, r1, r2		@ Shouldn't be needed
 	bics	r1, r1, r2		@ Clear 2 LSB (and set Z)
-	moveq	pc, lr			@ Quit if copy size is 0
+	bxeq	lr			@ Quit if copy size is 0
 
 	mov	r2, #0
 ClrLoop:
 	stmia	r0!, {r2}
 	subs	r1, r1, #4
 	bne	ClrLoop
-	mov	pc, lr
+	bx	lr
 
 @---------------------------------------------------------------------------------
 @ Copy memory if length	!= 0
@@ -113,13 +100,13 @@ CopyMem:
 	mov	r0, #3			@ These commands are used in cases where
 	add	r3, r3, r0		@ the length is not a multiple of 4,
 	bics	r3, r3, r0		@ even though it should be.
-	moveq	pc, lr			@ Length is zero, so exit
+	bxeq	lr			@ Length is zero, so exit
 CIDLoop:
 	ldmia	r1!, {r0}
 	stmia	r2!, {r0}
 	subs	r3, r3, #4
 	bne	CIDLoop
-	mov	pc, lr
+	bx	lr
 
 @---------------------------------------------------------------------------------
 	.align

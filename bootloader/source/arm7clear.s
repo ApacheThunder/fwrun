@@ -66,4 +66,5 @@ clear_EWRAM_loop:
 
 	pop	{r0-r9}
 	
-	mov	pc, lr
+	bx	lr
+  

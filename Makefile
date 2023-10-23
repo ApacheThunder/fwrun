@@ -20,7 +20,8 @@ all: $(TARGET).nds
 
 #---------------------------------------------------------------------------------
 $(TARGET).nds	:	arm7/$(TARGET).elf arm9/$(TARGET).elf
-	ndstool	-c $(TARGET).nds -7 arm7/$(TARGET).elf -9 arm9/$(TARGET).elf -b $(TARGET).bmp "fwrun;boot firmware.bin;nocebo"
+	ndstool	-c $(TARGET).nds -7 arm7/$(TARGET).elf -9 arm9/$(TARGET).elf -b $(TARGET).bmp "fwrun;boot firmware.bin;nocebo" \
+			-g DSFW 01 "FWRUN" -z 80040000 -u 00030004 -a 00000138 -p 0000
 
 #---------------------------------------------------------------------------------
 arm7 arm7/$(TARGET).elf:

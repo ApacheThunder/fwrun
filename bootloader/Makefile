@@ -12,28 +12,33 @@ endif
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	load
+#export TARGET		:= load
+TARGET		:=  load
 BUILD		?=	build
 SOURCES		:=	source source/patches 
-INCLUDES	:=	build ../include
+INCLUDES	:=	build
 SPECS		:=  specs
  
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-ARCH	:=	-marm -mthumb-interwork
+ARCH	:=	-mthumb-interwork -march=armv4t -mtune=arm7tdmi
 
-CFLAGS	:=	-g -Wall -Os\
-			-mcpu=arm7tdmi -mtune=arm7tdmi -fomit-frame-pointer\
+CFLAGS	:=	-g -Wall -O2 \
+			-fomit-frame-pointer \
 			-ffast-math \
+			-Wall -Wextra \
+#			-Wall -Wextra -Werror \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) $(EXTRA_CFLAGS) -DARM7
+CFLAGS	+=	$(INCLUDE) -DARM7
+# CFLAGS	+=	$(INCLUDE) -DARM7 -DEBUGMODE
 
-ASFLAGS	:=	-g $(ARCH) $(EXTRA_CFLAGS) $(INCLUDE)
+ASFLAGS	:=	-g $(ARCH) $(INCLUDE)
+# LDFLAGS	:=	-nostartfiles -T$(CURDIR)/../load.ld -g $(ARCH) -Wl,-Map,$(TARGET).map
 LDFLAGS	=	-nostartfiles -T $(TOPDIR)/load.ld -g $(ARCH) -Wl,-Map,$(TARGET).map
 
-LIBS	:= 
+LIBS	:= -lnds7
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -100,6 +105,7 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
+
 $(LOADBIN)	:	$(LOADELF)
 	@$(OBJCOPY) -O binary $< $@
 	@echo built ... $(notdir $@)
@@ -108,16 +114,10 @@ $(LOADBIN)	:	$(LOADELF)
 $(LOADELF)	: $(OFILES)
 	@echo linking $(notdir $@)
 	@$(LD)  $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@
+ 
 
-#arm9mpu_reset.o: mpu_reset.bin
 
-#mpu_reset.bin: mpu_reset.elf
-#	$(OBJCOPY) -O binary $< $@
-
-#mpu_reset.elf: $(TOPDIR)/arm9code/mpu_reset.s
-#	$(CC) $(ASFLAGS) -Ttext=0 -x assembler-with-cpp -nostartfiles -nostdlib $< -o $@
-
--include $(DEPENDS)
+ 
 #---------------------------------------------------------------------------------------
 endif
 #---------------------------------------------------------------------------------------

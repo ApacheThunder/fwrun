@@ -35,43 +35,49 @@
 #include "load_bin.h"
 
 #include "loader_arm9.h"
-#define LCDC_BANK_C (u16*)0x06840000
+#define LCDC_BANK_D (vu16*)0x06860000
+
+#define BOOTLOADER_ARM7LOCATION 0x06020000
 
 typedef struct {
     u32 __branch;
     fwunpackParams* params;
 } strap7Args;
 
-static void vramcpy(void* dst, const void* src, int len) {
+static void vramcpy(volatile void* dst, const void* src, int len) {
 	u16* dst16 = (u16*)dst;
 	u16* src16 = (u16*)src;
-	for ( ; len > 0; len -= 2) {
-		*dst16++ = *src16++;
-	}
+	for ( ; len > 0; len -= 2) { *dst16++ = *src16++; }
 }	
 
 void loader_run() {
 
-	// Direct CPU access to VRAM bank C
-	VRAM_C_CR = VRAM_ENABLE | VRAM_C_LCD;
+	if (isDSiMode() && (REG_SCFG_EXT & BIT(31))) {
+		REG_SCFG_CLK = 0x80;
+		REG_SCFG_EXT = 0x83040000;
+	}
+
+	// Direct CPU access to VRAM bank D
+	VRAM_D_CR = VRAM_ENABLE | VRAM_D_LCD;
 	// Load the loader/patcher into the correct address
-	vramcpy(LCDC_BANK_C, load_bin, load_bin_size);
+	vramcpy(LCDC_BANK_D, load_bin, load_bin_size);
 
     // put strap7 args in place
-    strap7Args* args = ((strap7Args*)LCDC_BANK_C);
+    strap7Args* args = ((strap7Args*)LCDC_BANK_D);
     args->params = &params;
 
     nocashMessage("irqDisable()");
 	irqDisable(IRQ_ALL);
 
-	VRAM_C_CR = VRAM_ENABLE | VRAM_C_ARM7_0x06000000;
+	VRAM_D_CR = VRAM_ENABLE | VRAM_D_ARM7_0x06020000;
+	
 	REG_EXMEMCNT |= ARM7_OWNS_ROM | ARM7_OWNS_CARD;
 	*((vu32*)0x02FFFFFC) = 0;
 	*((vu32*)0x02FFFE04) = (u32)0xE59FF018;
 	*((vu32*)0x02FFFE24) = (u32)0x02FFFE04;
 
     nocashMessage("resetARM7()");
-    resetARM7(0x06000000);
+    resetARM7(BOOTLOADER_ARM7LOCATION);
 
     nocashMessage("swiSoftReset()");
 	swiSoftReset();
