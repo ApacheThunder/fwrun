@@ -12,6 +12,7 @@
 #include "prefcompat.h"
 #include "encryption.h"
 #include "read_card.h"
+#include "nds_card.h"
 #include "tonccpy.h"
 
 #ifdef EMBEDDED_FIRMWARE
@@ -24,9 +25,6 @@
 #else
 #define NEED_FAT
 #endif
-
-#define NDS_HEADER 0x027FFE00
-#define NDS_HEADER2 0x02FFFE00
 
 fwunpackParams params;
 FILE* image;
@@ -95,7 +93,8 @@ int main(void) {
 	#endif
 
 	params.isDsi = isDSiMode();
-
+	params.hasCart = 0;
+	
 	printf("fwrun\n\n");
 	memset(&params, sizeof params, 1);
 
@@ -134,15 +133,41 @@ int main(void) {
 	
 	consoleClear();
 	
-	if (isDSiMode() && (REG_SCFG_EXT & BIT(31))) {
+	if (!isDSiMode()) {
+		ShowText();
+		ALIGN(4) u32 ndsHeader[0x80];
+		getHeader (ndsHeader);
+		bool noCart = false;
+		printf("Remove DS Card\nPress B to skip...");
+		do {
+			swiWaitForVBlank();
+			scanKeys();
+			if(keysDown() & KEY_B) { noCart = true; break; }
+			getHeader (ndsHeader);
+		} while (ndsHeader[0] != 0xFFFFFFFF);
+		consoleClear();
+		printf("Insert DS Card\nPress B to skip...");
+		do {
+			swiWaitForVBlank();
+			scanKeys();
+			if(keysDown() & KEY_B) { noCart = true; break; }
+			getHeader (ndsHeader);
+		} while (ndsHeader[0] == 0xFFFFFFFF);
+		if (!noCart) {
+			params.hasCart = 0x00000001;
+			for(int i = 0; i < 30; i++)swiWaitForVBlank();
+		}
+		consoleClear();
+	} else if (REG_SCFG_EXT & BIT(31)) {
 		bool CartWasMissing = (REG_SCFG_MC == 0x11);
 		if (!CartWasMissing) {
-			sNDSHeaderExt* ndsHeaderExt = (sNDSHeaderExt*)NDS_HEADER;
+			ALIGN(4) sNDSHeaderExt* ndsHeaderExt = (sNDSHeaderExt*)malloc(sizeof(sNDSHeaderExt));
 			if (REG_SCFG_MC == 0x10)enableSlot1();
 			cardInit(ndsHeaderExt);
-			tonccpy((void*)NDS_HEADER2, (void*)NDS_HEADER, 0x170);
+			params.hasCart = 0x00000001;
 		}
 	}
+	
 	
 	loader_run();
 

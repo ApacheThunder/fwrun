@@ -46,4 +46,5 @@ typedef struct {
     fwAddrs guidata;
     fwType type;
     u32 isDsi;
+	u32 hasCart;
 } fwunpackParams;

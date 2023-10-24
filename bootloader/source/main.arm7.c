@@ -363,7 +363,7 @@ void arm7_resetMemory () {
 
 u32 arm7_loadBinary (void) {
 	u32 errorCode;
-		
+	
 	tDSiHeader* twlHeaderTemp = (tDSiHeader*)TMP_HEADER; // Use same region cheat engine goes. Cheat engine will replace this later when it's not needed.
 
 	// Init card
@@ -372,18 +372,18 @@ u32 arm7_loadBinary (void) {
 
 	ndsHeader = loadHeader(twlHeaderTemp); // copy twlHeaderTemp to ndsHeader location
 
-	if (((u32)ndsHeader->arm9destination != 0x02000000) && ndsHeader->arm9binarySize < 0x0BFFFF) {
-		cardRead(ndsHeader->arm9romOffset, (u32*)NTR_CARTARM9, ndsHeader->arm9binarySize);
-	} else {
-		cardRead(ndsHeader->arm9romOffset, (u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize);
-	}
+	u32 Arm9Size = ndsHeader->arm9binarySize;
+	u32 MaxArm9Size = 0x09FFFF; // DS firwmare appears able to relocate it self if the cart's arm binary would be large enough to over write it... but that doesn't seem to happen in our case so must cap arm9 reads for now.
+	
+	if (Arm9Size > MaxArm9Size)Arm9Size = MaxArm9Size;
+	
+	cardRead(ndsHeader->arm9romOffset, (u32*)ndsHeader->arm9destination, Arm9Size);
 	cardRead(ndsHeader->arm7romOffset, (u32*)NTR_CARTARM7, ndsHeader->arm7binarySize);
 	
 	// Fix Pokemon games needing header data.
-	copyLoop((u32*)NDS_HEADER_POKEMON, (u32*)NDS_HEADER, 0x170);
-	// copyLoop((u32*)0x023FFE00, (u32*)NDS_HEADER, 0x170);
+	// copyLoop((u32*)NDS_HEADER_POKEMON, (u32*)NDS_HEADER, 0x170);
 
-	char* romTid = (char*)NDS_HEADER_POKEMON+0xC;
+	/* char* romTid = (char*)NDS_HEADER_POKEMON+0xC;
 	if (   memcpy(romTid, "ADA", 3) == 0 // Diamond
 		|| memcmp(romTid, "APA", 3) == 0 // Pearl
 		|| memcmp(romTid, "CPU", 3) == 0 // Platinum
@@ -393,15 +393,14 @@ u32 arm7_loadBinary (void) {
 		// Make the Pokemon game code ADAJ.
 		const char gameCodePokemon[] = { 'A', 'D', 'A', 'J' };
 		memcpy((char*)NDS_HEADER_POKEMON+0xC, gameCodePokemon, 4);
-	}
+	}*/
 	
 	return ERR_NONE;
 }
 
 static void setMemoryAddress(const tNDSHeader* ndsHeader) {
-	if (ndsHeader->unitCode > 0) {
+	/*if (ndsHeader->unitCode > 0) {
 		copyLoop((u32*)0x027FFA80, (u32*)ndsHeader, 0x160);	// Make a duplicate of DS header
-		copyLoop((u32*)0x02FFFA80, (u32*)ndsHeader, 0x160);	// Make a duplicate of DS header
 
 		*(u32*)(0x027FA680) = 0x02FD4D80;
 		*(u32*)(0x027FA684) = 0x00000000;
@@ -425,7 +424,7 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 		} else if (strncmp(getRomTid(ndsHeader)+3, "K", 1) == 0) {
 			*(u8*)(0x027FFD70) = 5;
 		}
-	}
+	}*/
 	
     // Set memory values expected by loaded NDS
     // from NitroHax, thanks to Chism
@@ -433,7 +432,16 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 	*((u32*)0x027FF804) = chipID;					// Command10CardID
 	*((u16*)0x027FF808) = ndsHeader->headerCRC16;	// Header Checksum, CRC-16 of [000h-15Dh]
 	*((u16*)0x027FF80A) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
-	// *((u16*)0x027FF850) = 0x5835;
+	*((u16*)0x027FF850) = 0x5835;
+	*((u32*)0x027FF860) = (u32)ndsHeader->arm7executeAddress;
+		
+	// Extra bits
+	*((u16*)0x027FF869) = 0x03FE;
+	*((u16*)0x027FF874) = 0x4F5D;
+	 *((u8*)0x027FF880) = 0x03;
+	 *((u8*)0x027FF884) = 0x02;
+	*((u32*)0x027FF890) = 0x30002A02;
+	
 	// Copies of above
 	*((u32*)0x027FFC00) = chipID;					// CurrentCardID
 	*((u32*)0x027FFC04) = chipID;					// Command10CardID
@@ -441,26 +449,23 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 	*((u16*)0x027FFC0A) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
 	*((u16*)0x027FFC10) = 0x5835;
 	*((u16*)0x027FFC40) = 0x01;						// Boot Indicator -- EXTREMELY IMPORTANT!!! Thanks to cReDiAr
-			
-	// *((vu32*)0x027FF860) = (u32)ndsHeader->arm7executeAddress;	 // Copy of Arm7's entry address?
-	// memcpy((u32*)0x027FF860, (u32*)ndsHeader->arm7executeAddress, 0x04);
-	// *((u32*)0x027FF860) = (u32)ndsHeader->arm7executeAddress;
-	// copyLoop((u32*)0x027FF860, (u32*)0x027FFE34, 0x4);
-	tonccpy((void*)0x027FF860, (u32*)0x027FFE34, 0x4);
-	tonccpy((void*)0x02FFF860, (u32*)0x02FFFE34, 0x4);
+	
+	(*(vu32*)0x027FFFF4) = 0;
 	
 	// Smaller copy of header? This is what's present in memory during DS firmware boot up at least...
-	copyLoop((u32*)0x0235603C, (u32*)NDS_HEADER, 0xE0);
-	arm7_clearmem ((void*)0x0235603C, 0x4);
-	// copyLoop((u32*)0x023FF000, (u32*)0x027FF000, 0x1000);
-	// tonccpy((u32*)0x023FF000, (u32*)0x027FF000, 0x1000);
+	copyLoop((u32*)0x0235621C, (u32*)NDS_HEADER, 0xE0);
+	*((u32*)0x0235621C) = 0xFFFFFFFF;
+	
+	*((u32*)0x027FFE38) = (u32)NTR_CARTARM7;
+	
+	copyLoop((u32*)0x023FF000, (u32*)0x027FF000, 0x1000);
 }
 
 void arm7_main (void) {
 	
 	u32 errorCode;
-	bool noCart = ((REG_SCFG_MC == 0x11) || (REG_SCFG_MC == 0x10));
-	if (!params->isDsi) noCart = true;
+	bool noCart = (params->hasCart == 0);
+		
 	if (params->isDsi && (REG_SCFG_EXT & BIT(31))) {
 		REG_MBK9=0xFCFFFF0F;
 		*((vu32*)REG_MBK1)=0x8D898581;
@@ -520,8 +525,8 @@ void arm7_main (void) {
 
 	if (!noCart)setMemoryAddress(ndsHeader);
 
-	*((vu32*)0x02FFFE24) = params->boot9.ramaddr;
-	*((vu32*)0x02FFFE34) = params->boot7.ramaddr;
+	*((vu32*)0x027FC024) = (u32)params->boot9.ramaddr;
+	*((vu32*)0x027FC034) = (u32)params->boot7.ramaddr;
 		
 	ipcSendState(ARM7_BOOTBIN);
 
